@@ -1,0 +1,41 @@
+---
+- name: Update and list files on dev server
+  hosts: appinion-dev
+  become: yes
+  vars:
+    repo_dir: "/var/www/appinion-vms"
+    # github_repo: "git@github.com:appiniondev/appinion-vms.git"
+    github_repo: "https://github.com/appiniondev/appinion-vms.git"
+    repo_branch: "master"
+
+  tasks:
+    # - name: Update apt repository
+    #   apt:
+    #     update_cache: yes
+    - name: Ensure the repository directory exists
+      file:
+        path: "{{ repo_dir }}"
+        state: directory
+        # owner: www-data
+        # group: www-data
+        # mode: '0755'
+
+    - name: Pull the latest changes from the repository
+      git:
+        repo: "{{ github_repo }}"  # Replace with your repository URL
+        dest: "{{ repo_dir }}"
+        version: "{{ repo_branch }}"
+        update: yes
+        force: yes  # This forces an update even if there are local changes
+      register: git_pull_output
+
+    - name: Display the output of the Git pull operation
+      debug:
+        msg: "{{ git_pull_output.stdout }}"
+
+    # - name: Set permissions for the repository directory
+    #   file:
+    #     path: "{{ repo_dir }}"
+    #     owner: www-data
+    #     group: www-data
+    #     recurse: yes

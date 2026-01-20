@@ -1,0 +1,50 @@
+pipeline {
+    agent any
+
+    environment {
+        SSH_KEY = credentials('appinion-dev')  // Reference the stored SSH key by ID
+        SSH_USER = 'dev_one'              // Use your SSH username
+        SSH_HOST = 'dev.appinionbd.com'              // Replace with your remote server IP or domain
+        GIT_BRANCH = 'master'                 // Branch to deploy
+        DEPLOY_DIR = '/var/www/momenta_web'  // Directory on the remote server to deploy the PHP project
+    }
+
+    stages {
+        stage('Deploy') {
+            steps {
+                sshagent(['appinion-dev']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} << 'EOF'
+                          cd ${DEPLOY_DIR}
+                          
+                          git pull origin ${GIT_BRANCH}
+
+                          # Install PHP dependencies with composer if needed
+                          # composer install --no-dev --prefer-dist --optimize-autoloader
+
+                          # Run database migrations
+                          # php artisan migrate --force
+
+                          # Cache configuration, routes, and views for better performance
+                          # php artisan config:cache
+                          #php artisan route:cache
+                          #php artisan view:cache
+
+                          # Restart Apache/Nginx if necessary
+                          # sudo systemctl restart apache2
+                        EOF
+                    """
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'Deployment successful!'
+        }
+        failure {
+            echo 'Deployment failed.'
+        }
+    }
+}
