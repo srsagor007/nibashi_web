@@ -7,20 +7,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * @property int $id
- * @property string $name
- * @property string|null $slug
- * @property int $is_active
- * @property \Carbon\CarbonImmutable|null $deleted_at
- * @property \Carbon\CarbonImmutable|null $created_at
- * @property \Carbon\CarbonImmutable|null $updated_at
- * @property-read mixed $controller_name
- *
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Permission query()
- *
- * @mixin \Eloquent
- */
 class Permission extends Model
 {
     use CommonAttributes;
