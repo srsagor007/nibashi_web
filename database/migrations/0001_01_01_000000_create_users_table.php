@@ -29,6 +29,12 @@ return new class extends Migration
             $table->boolean('merital_status')->default(true);
             $table->unsignedTinyInteger('gender')->nullable()->comment('1=Male , 2 = Female ,0=Unknown');
             $table->timestamp('email_verified_at')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_superuser')->default(false);
+            $table->boolean('is_password_changed')->default(false);
+            $table->boolean('can_access_admin_panel')->default(false);
+            $table->timestamp('last_login')->nullable();
+            $table->unsignedInteger('primary_role_id');
             $table->rememberToken();
             $table->softDeletes();
             $table->timestamps();

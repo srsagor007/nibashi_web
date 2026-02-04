@@ -24,7 +24,6 @@ class SmsService
         $url = "{$this->domain}/api/v3/send-sms";
 
         if (config('app.env') !== 'production') {
-            // For local development, use a mock URL or skip sending
             return true;
         }
 
@@ -65,14 +64,4 @@ class SmsService
         return isset($result['status']) && $result['status'] === 'SUCCESS';
     }
 
-    // try {
-    //     $response = Http::asForm()->post($url, $payload);
-    //     return $response;
-
-    //     if ($response->successful() && ($response['status'] ?? '') === 'SUCCESS') {
-    //         return true;
-    //     }
-    // } catch (\Exception $e) {
-    //     return false;
-    // }
 }

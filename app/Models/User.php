@@ -88,57 +88,51 @@ class User extends Authenticatable
 
     protected $management_roles = ['admin', 'marketing', 'support']; // admin panel users
 
-    protected $appends = ['name_with_code', 'name_with_userid', 'photo_url'];
+    protected $appends = [ 'photo_url'];
 
-    protected $fillable = [
+     protected $fillable = [
         'name',
         'userid',
-        'user_code',
         'email',
-        'gender',
+        'phone_number',
+        'password',
+        'present_address',
+        'permanent_address',
         'dob',
-        'marital_status',
-        'date_of_marriage',
-        'designation',
-        // 'supervisor_user_id', No need. delete this column
-        'supervisor_user_code',
-        'rsm_region_id',
-        'rsm_region',
+        'nid',
+        'photo',
+        'nid_photo',
+        'occupation',
+        'office_name',
+        'office_address',
+        'refer_code',
+        'refer_by',
+        'merital_status',
+        'gender',
+        'email_verified_at',
         'is_active',
         'is_superuser',
-        'primary_role_id',
-        'points',
-        'hq',
-        'tbl_depot_id',
-        'tbl_business_business_code',
-        'tbl_pso_user_type_id',
-        'phone',
-        'photo',
-        'address',
-        'password',
-        'last_login',
-        'can_access_admin_panel',
-        'device_token',
-        'device_data',
-        'user_meta',
-        'updated_by',
         'is_password_changed',
-        'last_update_state',
+        'can_access_admin_panel',
+        'last_login',
+        'primary_role_id',
+        'remember_token',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
-        'is_superuser',
-        'can_access_admin_panel',
-        'device_data',
-        'deleted_at',
-        'created_at',
-        'updated_at',
-        'user_meta',
-        'updated_by',
-        'email_verified_at',
-        'last_update_state',
+    ];
+
+    protected $casts = [
+        'dob' => 'date',
+        'email_verified_at' => 'datetime',
+        'last_login' => 'datetime',
+        'is_active' => 'boolean',
+        'is_superuser' => 'boolean',
+        'is_password_changed' => 'boolean',
+        'can_access_admin_panel' => 'boolean',
+        'merital_status' => 'boolean',
     ];
 
     public function isAdmin()
@@ -218,63 +212,14 @@ class User extends Authenticatable
         return $this->belongsTo(Role::class, 'primary_role_id');
     }
 
-    public function dsm()
-    {
-        return $this->belongsTo(User::class, 'supervisor_user_code', 'user_code')
-            ->where('primary_role_id', 6);
-    }
-
-    public function rsm()
-    {
-        return $this->belongsTo(User::class, 'supervisor_user_code', 'user_code')
-            ->where('primary_role_id', 5);
-    }
-
-    public function sm()
-    {
-        return $this->belongsTo(User::class, 'supervisor_user_code', 'user_code')
-            ->where('primary_role_id', 4);
-    }
-
+  
     public function buddy_info()
     {
         return $this->hasOne(BuddyInfo::class, 'rsm_user_id');
     }
 
-    public function depot()
-    {
-        return $this->belongsTo(Depot::class, 'tbl_depot_id');
-    }
+    
 
-    public function region()
-    {
-        return $this->belongsTo(Region::class, 'rsm_region_id');
-    }
-
-    public function pso_dsm_user_type()
-    {
-        return $this->belongsTo(PsoUserType::class, 'tbl_pso_user_type_id');
-    }
-
-    public function business()
-    {
-        return $this->belongsTo(Business::class, 'tbl_business_business_code', 'business_code');
-    }
-
-    public function pso_doctors()
-    {
-        return $this->belongsToMany(DoctorInfo::class, 'tbl_pso_wise_doctor', 'user_code', 'tbl_doctor_info_id', 'user_code');
-    }
-
-    public function pso_exam_assigns()
-    {
-        return $this->hasMany(ExamAssign::class, 'user_id', 'id');
-    }
-
-    public function locations()
-    {
-        return $this->hasMany(UserLocation::class, 'user_id', 'id');
-    }
 
     protected function casts(): array
     {
@@ -286,9 +231,5 @@ class User extends Authenticatable
         ];
     }
 
-    public function pendingPsoTransfers()
-    {
-        return $this->hasMany(PsoTransfer::class, 'requested_for_user_id')
-            ->where('status', 1); // pending status
-    }
+    
 }

@@ -7,6 +7,11 @@ use App\Http\Controllers\AdminConsole\UserRoleController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\DivisionController;
+use App\Http\Controllers\DistrictController;
+use App\Http\Controllers\ThanaController;
+use App\Http\Controllers\AreaController;
+use App\Http\Controllers\AreaNodeController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', 'dashboard');
@@ -28,6 +33,23 @@ Route::middleware(['auth', 'password_change_verify'])->group(function () {
         Route::get('users/role-wise-users/{role_slug}/{supervisor_user_code?}', [UserController::class, 'role_wise_users'])->name('users.role-wise-users');
         Route::post('users-bulk-upload', [UserController::class, 'bulkUpload'])->name('users.bulk-upload');
        
+        Route::resource('divisions', DivisionController::class);
+        Route::post('divisions/{division}/{status}', [DivisionController::class, 'updateStatus'])->name('divisions.update-status');
+        Route::resource('districts', DistrictController::class);
+        Route::post('districts/{district}/{status}', [DistrictController::class, 'updateStatus'])->name('districts.update-status');
+
+        Route::resource('thanas', ThanaController::class);
+        Route::get('get-districts/{id}',[ThanaController::class,'getDistricts'])->name('get.districts');
+        Route::post('thanas/{thana}/{status}',[ThanaController::class,'updateStatus'])->name('thanas.update-status');
+
+        Route::resource('areas', AreaController::class);
+        Route::get('get-thanas/{id}',[AreaController::class,'getThanas'])->name('areas.get-thanas');
+        Route::post('areas/{area}/{status}',[AreaController::class,'updateStatus'])->name('areas.update-status');
+
+
+        Route::resource('area-nodes', AreaNodeController::class);
+        Route::get('area-nodes/get/{area_id}/{parent_type}', [AreaNodeController::class,'getNodes'])->name('area-nodes.get');
+        Route::get('area-nodes/{areaNode}/{status}', [AreaNodeController::class,'updateStatus'])->name('area-nodes.update-status');
 
         // This route is for data migration purpose only. this will work only in local environment
         Route::get('sync-user-role', [UserController::class, 'sync_user_roles'])->name('users.sync-user-role-dev');
