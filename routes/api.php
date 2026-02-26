@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BuildingController;
+use App\Http\Controllers\Api\FlatController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\Auth\RegisterController;
 
@@ -17,5 +19,23 @@ Route::prefix('v1')->group(function () {
         Route::post('profile/update-photo', [AuthController::class, 'updateProfilePhoto'])->name('profile.updatePhoto');
         Route::post('logout', [AuthController::class, 'logout']);
         Route::post('change-password', [AuthController::class, 'changePassword']);
+
+        Route::get('locations/divisions', [BuildingController::class, 'divisions']);
+        Route::get('locations/districts', [BuildingController::class, 'districts']);
+        Route::get('locations/thanas', [BuildingController::class, 'thanas']);
+        Route::get('locations/areas', [BuildingController::class, 'areas']);
+        Route::get('locations/area-nodes', [BuildingController::class, 'areaNodes']);
+
+        Route::get('buildings', [BuildingController::class, 'index']);
+        Route::post('buildings', [BuildingController::class, 'store']);
+        Route::get('buildings/{id}', [BuildingController::class, 'show']);
+        Route::post('buildings/{id}', [BuildingController::class, 'update']);
+        Route::delete('buildings/{id}', [BuildingController::class, 'destroy']);
+
+        Route::get('buildings/{buildingId}/flats', [FlatController::class, 'indexByBuilding']);
+        Route::post('buildings/{buildingId}/flats', [FlatController::class, 'store']);
+        Route::get('flats/{id}', [FlatController::class, 'show']);
+        Route::post('flats/{id}', [FlatController::class, 'update']);
+        Route::delete('flats/{id}', [FlatController::class, 'destroy']);
     });
 });
