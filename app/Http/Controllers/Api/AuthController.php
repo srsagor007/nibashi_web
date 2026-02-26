@@ -12,7 +12,6 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
@@ -21,7 +20,7 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'userid' => 'string|required|max:10',
+            'phone_number' => 'string|required|max:20',
             'password' => 'required|string',
             'device_data' => 'string|required',
             'device_token' => 'string|nullable',
@@ -33,9 +32,9 @@ class AuthController extends Controller
 
         try {
             $user = User::query()
-                ->where('userid', $request->userid)
+                ->where('phone_number', $request->phone_number)
                 ->first();
-            throw_unless($user, new Exception('Invalid User ID or Password.'), 401);
+            throw_unless($user, new Exception('Invalid phone number or password.'), 401);
 
 
 
@@ -44,7 +43,7 @@ class AuthController extends Controller
                 $password_matched = true;
             }
 
-            throw_unless($password_matched, new Exception('Invalid User ID or Password'), 401);
+            throw_unless($password_matched, new Exception('Invalid phone number or password'), 401);
             throw_unless($user->is_active == 1, new Exception('User deactivated. Contact system admin'), 401);
 
             if (env('APP_ENV') == 'production') {
@@ -228,9 +227,12 @@ class AuthController extends Controller
         ]);
 
         try {
+            if ($validator->fails()) {
+                return response()->error('The given data was invalid', $validator->errors(), 422);
+            }
 
-            if ($request->new_password != $request->confirm_new_password) {
-                return response()->error('New password and confirm password does not matched', null, 422);
+            if ($request->new_password !== $request->confirm_new_password) {
+                return response()->error('New password and confirm password do not match.', null, 422);
             }
 
             $id = auth()->user()->id;
@@ -238,12 +240,9 @@ class AuthController extends Controller
             $user = User::find($id);
             throw_unless($user, new Exception('Invalid User.'), 401);
 
-            throw_if(
-                ! Hash::check($request->old_password, $user->password),
-                ValidationException::withMessages([
-                    'old_password' => ['The old password is incorrect.'],
-                ])
-            );
+            if (! Hash::check($request->old_password, $user->password)) {
+                return response()->error('The old password is incorrect.', null, 422);
+            }
 
             $user->update([
                 'password' => Hash::make($request->new_password),
@@ -254,15 +253,14 @@ class AuthController extends Controller
 
             return response()->success(null, 'Password changed successfully. Please log in again.', 200);
         } catch (\Throwable $th) {
-            return response()->error($th->getMessage(), null, 500);
+            return response()->error($th->getMessage(), null, $th->getCode() ?: 500);
         }
     }
 
     public function forgetPassword(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'rf_id' => 'required|string',
-            'mobile_no' => [
+            'phone_number' => [
                 'required',
                 'string',
                 'regex:/^01[0-9]{9}$/',
@@ -272,18 +270,9 @@ class AuthController extends Controller
         try {
             $validated = $validator->validate();
 
-            $user = User::query()
-                ->where('userid', $request->rf_id)
-                ->first();
+            $user = User::query()->where('phone_number', $request->phone_number)->first();
 
-            throw_unless($user, new Exception('Invalid User ID or Password.'), 404);
-
-            $provided_phone = substr($request->mobile_no, 1);
-            $user_phone = substr($user->phone, 1);
-
-            if ($provided_phone !== $user_phone) {
-                throw new Exception('Phone number does not match to your account.', 404);
-            }
+            throw_unless($user, new Exception('Invalid phone number.'), 404);
 
             $new_password = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
             $updated_password = Hash::make($new_password);
@@ -296,12 +285,12 @@ class AuthController extends Controller
             $message = 'Your New Password is ' . $new_password;
 
             if (env('APP_ENV') !== 'local') {
-                $this->smsService->sendSms($validated['mobile_no'], $message);
+                $this->smsService->sendSms($validated['phone_number'], $message);
             }
 
             $user->tokens()->delete();
 
-            return response()->success($user, 'New Password has been sent to your phone number.', 200);
+            return response()->success(null, 'New password has been sent to your phone number.', 200);
         } catch (\Throwable $th) {
             return response()->error($th->getMessage(), null, $th->getCode() ?: 500);
         }
