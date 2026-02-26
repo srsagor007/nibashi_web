@@ -206,7 +206,7 @@ class BuildingController extends Controller
             'has_cctv' => 'nullable|boolean',
             'has_security_guard' => 'nullable|boolean',
             'has_parking' => 'nullable|boolean',
-            'images' => 'required|array|min:1|max:5',
+            'images' => 'nullable|array|min:0|max:10',
             'images.*' => 'image|mimes:jpeg,png,jpg|max:10240',
         ]);
 
@@ -348,7 +348,7 @@ class BuildingController extends Controller
             'has_security_guard' => 'nullable|boolean',
             'has_parking' => 'nullable|boolean',
             'replace_images' => 'nullable|boolean',
-            'images' => 'sometimes|array|min:1|max:5',
+            'images' => 'sometimes|array|min:0|max:5',
             'images.*' => 'image|mimes:jpeg,png,jpg|max:10240',
         ]);
 
