@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Building;
 use App\Models\Flat;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -43,6 +45,75 @@ class FlatController extends Controller
             ->get();
 
         return response()->success($flats, 'Flat list found', 200);
+    }
+
+    public function availableList(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'per_page' => 'nullable|integer|min:1|max:100',
+            'page' => 'nullable|integer|min:1',
+            'division_id' => 'nullable|integer|exists:divisions,id',
+            'district_id' => 'nullable|integer|exists:districts,id',
+            'thana_id' => 'nullable|integer|exists:thanas,id',
+            'area_id' => 'nullable|integer|exists:areas,id',
+            'min_rent' => 'nullable|numeric|min:0|max:99999999.99',
+            'max_rent' => 'nullable|numeric|min:0|max:99999999.99|gte:min_rent',
+            'bed_room' => 'nullable|integer|min:0|max:20',
+            'bathroom' => 'nullable|integer|min:0|max:20',
+            'is_furnished' => 'nullable|boolean',
+            'search' => 'nullable|string|max:100',
+            'sort_by' => ['nullable', Rule::in(['latest', 'rent_asc', 'rent_desc'])],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->error('The given data was invalid', $validator->errors(), 422);
+        }
+
+        $flats = $this->availableFlatsQuery($request)
+            ->with([
+                'images',
+                'building:id,name,address_line,division_id,district_id,thana_id,area_id,has_gas,has_generator,has_lift,has_cctv,has_security_guard,has_parking',
+                'building.division:id,name',
+                'building.district:id,name',
+                'building.thana:id,name',
+                'building.area:id,name',
+            ]);
+
+        $sortBy = $request->input('sort_by', 'latest');
+        if ($sortBy === 'rent_asc') {
+            $flats->orderBy('house_rent', 'asc')->orderBy('id', 'desc');
+        } elseif ($sortBy === 'rent_desc') {
+            $flats->orderBy('house_rent', 'desc')->orderBy('id', 'desc');
+        } else {
+            $flats->latest('id');
+        }
+
+        $paginator = $flats->paginate($request->integer('per_page', 10));
+
+        return response()->success($this->mapAvailableListPaginated($paginator), 'Available flat list found', 200);
+    }
+
+    public function availableDetails($id)
+    {
+        $flat = $this->availableFlatsQuery()
+            ->with([
+                'images',
+                'building:id,name,address_line,building_no,latitude,longitude,division_id,district_id,thana_id,area_id,has_gas,has_generator,has_lift,has_cctv,has_security_guard,has_parking',
+                'building.division:id,name',
+                'building.district:id,name',
+                'building.thana:id,name',
+                'building.area:id,name',
+                'building.sectorNode:id,name',
+                'building.blockNode:id,name',
+                'building.roadNode:id,name',
+            ])
+            ->find($id);
+
+        if (! $flat) {
+            return response()->error('Flat not found', null, 404);
+        }
+
+        return response()->success($this->mapAvailableDetails($flat), 'Available flat details found', 200);
     }
 
     public function store(Request $request, $buildingId)
@@ -296,5 +367,136 @@ class FlatController extends Controller
             ->where('id', $buildingId)
             ->where('building_owner', auth()->id())
             ->first();
+    }
+
+    private function availableFlatsQuery(?Request $request = null): Builder
+    {
+        return Flat::query()
+            ->where('flats.status', 'vacant')
+            ->where('flats.is_active', true)
+            ->whereNull('flats.deleted_at')
+            ->whereHas('building', function (Builder $query) use ($request) {
+                $query->where('is_active', true)
+                    ->when($request?->filled('division_id'), fn (Builder $q) => $q->where('division_id', $request->division_id))
+                    ->when($request?->filled('district_id'), fn (Builder $q) => $q->where('district_id', $request->district_id))
+                    ->when($request?->filled('thana_id'), fn (Builder $q) => $q->where('thana_id', $request->thana_id))
+                    ->when($request?->filled('area_id'), fn (Builder $q) => $q->where('area_id', $request->area_id));
+            })
+            ->when($request?->filled('min_rent'), fn (Builder $query) => $query->where('house_rent', '>=', $request->min_rent))
+            ->when($request?->filled('max_rent'), fn (Builder $query) => $query->where('house_rent', '<=', $request->max_rent))
+            ->when($request?->filled('bed_room'), fn (Builder $query) => $query->where('bed_room', $request->bed_room))
+            ->when($request?->filled('bathroom'), fn (Builder $query) => $query->where('bathroom', $request->bathroom))
+            ->when($request?->filled('is_furnished'), fn (Builder $query) => $query->where('is_furnished', (bool) $request->boolean('is_furnished')))
+            ->when($request?->filled('search'), function (Builder $query) use ($request) {
+                $search = trim((string) $request->input('search'));
+                $query->where(function (Builder $q) use ($search) {
+                    $q->where('flat_number', 'like', "%{$search}%")
+                        ->orWhereHas('building', function (Builder $b) use ($search) {
+                            $b->where('name', 'like', "%{$search}%")
+                                ->orWhere('address_line', 'like', "%{$search}%");
+                        });
+                });
+            });
+    }
+
+    private function mapAvailableListPaginated(LengthAwarePaginator $paginator): array
+    {
+        return [
+            'current_page' => $paginator->currentPage(),
+            'data' => collect($paginator->items())->map(fn (Flat $flat) => [
+                'id' => $flat->id,
+                'flat_number' => $flat->flat_number,
+                'status' => $flat->status,
+                'vacant_date' => $flat->vacant_date?->format('Y-m-d'),
+                'house_rent' => $flat->house_rent,
+                'service_charge' => $flat->service_charge,
+                'total_flat_size' => $flat->total_flat_size,
+                'floor_no' => $flat->floor_no,
+                'bed_room' => $flat->bed_room,
+                'bathroom' => $flat->bathroom,
+                'balcony' => $flat->balcony,
+                'is_furnished' => $flat->is_furnished,
+                'image_url' => $flat->image_url,
+                'location' => [
+                    'division' => $flat->building?->division?->name,
+                    'district' => $flat->building?->district?->name,
+                    'thana' => $flat->building?->thana?->name,
+                    'area' => $flat->building?->area?->name,
+                    'address_line' => $flat->building?->address_line,
+                    'text' => implode(', ', array_values(array_filter([
+                        $flat->building?->area?->name,
+                        $flat->building?->thana?->name ?? $flat->building?->district?->name,
+                    ]))),
+                ],
+                'building' => [
+                    'id' => $flat->building?->id,
+                    'name' => $flat->building?->name,
+                    'has_gas' => (bool) $flat->building?->has_gas,
+                    'has_generator' => (bool) $flat->building?->has_generator,
+                    'has_lift' => (bool) $flat->building?->has_lift,
+                    'has_cctv' => (bool) $flat->building?->has_cctv,
+                    'has_security_guard' => (bool) $flat->building?->has_security_guard,
+                    'has_parking' => (bool) $flat->building?->has_parking,
+                ],
+            ])->values()->all(),
+            'first_page_url' => $paginator->url(1),
+            'from' => $paginator->firstItem(),
+            'last_page' => $paginator->lastPage(),
+            'last_page_url' => $paginator->url($paginator->lastPage()),
+            'next_page_url' => $paginator->nextPageUrl(),
+            'path' => $paginator->path(),
+            'per_page' => $paginator->perPage(),
+            'prev_page_url' => $paginator->previousPageUrl(),
+            'to' => $paginator->lastItem(),
+            'total' => $paginator->total(),
+        ];
+    }
+
+    private function mapAvailableDetails(Flat $flat): array
+    {
+        return [
+            'id' => $flat->id,
+            'flat_number' => $flat->flat_number,
+            'status' => $flat->status,
+            'vacant_date' => $flat->vacant_date?->format('Y-m-d'),
+            'house_rent' => $flat->house_rent,
+            'service_charge' => $flat->service_charge,
+            'total_flat_size' => $flat->total_flat_size,
+            'floor_no' => $flat->floor_no,
+            'bed_room' => $flat->bed_room,
+            'bathroom' => $flat->bathroom,
+            'balcony' => $flat->balcony,
+            'kitchen' => $flat->kitchen,
+            'dining' => $flat->dining,
+            'drawing' => $flat->drawing,
+            'is_furnished' => $flat->is_furnished,
+            'preferable' => $flat->preferable,
+            'images' => $flat->images->map(fn ($image) => [
+                'id' => $image->id,
+                'sort_order' => $image->sort_order,
+                'image_url' => $image->image_url,
+            ])->values()->all(),
+            'building' => [
+                'id' => $flat->building?->id,
+                'name' => $flat->building?->name,
+                'building_no' => $flat->building?->building_no,
+                'address_line' => $flat->building?->address_line,
+                'latitude' => $flat->building?->latitude,
+                'longitude' => $flat->building?->longitude,
+                'division' => $flat->building?->division?->name,
+                'district' => $flat->building?->district?->name,
+                'thana' => $flat->building?->thana?->name,
+                'area' => $flat->building?->area?->name,
+                'sector' => $flat->building?->sectorNode?->name,
+                'block' => $flat->building?->blockNode?->name,
+                'road' => $flat->building?->roadNode?->name,
+                'has_gas' => (bool) $flat->building?->has_gas,
+                'has_generator' => (bool) $flat->building?->has_generator,
+                'has_lift' => (bool) $flat->building?->has_lift,
+                'has_cctv' => (bool) $flat->building?->has_cctv,
+                'has_security_guard' => (bool) $flat->building?->has_security_guard,
+                'has_parking' => (bool) $flat->building?->has_parking,
+            ],
+        ];
     }
 }

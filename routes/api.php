@@ -12,6 +12,8 @@ Route::prefix('v1')->group(function () {
     Route::post('/register', [RegisterController::class, 'register']);
     Route::post('/verify-otp', [RegisterController::class, 'verifyOtp']);
     Route::post('/select-user-type', [RegisterController::class, 'selectUserType']);
+    Route::get('public/flats/available', [FlatController::class, 'availableList']);
+    Route::get('public/flats/available/{id}', [FlatController::class, 'availableDetails']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('profile', [AuthController::class, 'profile']);
@@ -34,6 +36,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('buildings/{buildingId}/flats', [FlatController::class, 'indexByBuilding']);
         Route::post('buildings/{buildingId}/flats', [FlatController::class, 'store']);
+        Route::get('flats/available', [FlatController::class, 'availableList']);
+        Route::get('flats/available/{id}', [FlatController::class, 'availableDetails']);
         Route::get('flats/{id}', [FlatController::class, 'show']);
         Route::post('flats/{id}', [FlatController::class, 'update']);
         Route::delete('flats/{id}', [FlatController::class, 'destroy']);
