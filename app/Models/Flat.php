@@ -5,9 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Flat extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'building_id',
         'flat_number',
@@ -64,6 +67,6 @@ class Flat extends Model
     {
         $image = $this->relationLoaded('images') ? $this->images->first() : $this->images()->first();
 
-        return $image?->image_url;
+        return data_get($image, 'image_url');
     }
 }

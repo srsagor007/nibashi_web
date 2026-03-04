@@ -107,9 +107,10 @@ class FlatController extends Controller
                 'building.blockNode:id,name',
                 'building.roadNode:id,name',
             ])
-            ->find($id);
+            ->whereKey($id)
+            ->first();
 
-        if (! $flat) {
+        if (! $flat instanceof Flat) {
             return response()->error('Flat not found', null, 404);
         }
 
@@ -215,8 +216,9 @@ class FlatController extends Controller
         $flat = Flat::query()
             ->with(['building:id,name,building_owner', 'images'])
             ->find($id);
+        $buildingOwner = (int) data_get($flat, 'building.building_owner', 0);
 
-        if (! $flat || (int) $flat->building?->building_owner !== (int) auth()->id()) {
+        if (! $flat || $buildingOwner !== (int) auth()->id()) {
             return response()->error('Flat not found', null, 404);
         }
 
@@ -226,8 +228,9 @@ class FlatController extends Controller
     public function update(Request $request, $id)
     {
         $flat = Flat::query()->with(['building:id,building_owner', 'images'])->find($id);
+        $buildingOwner = (int) data_get($flat, 'building.building_owner', 0);
 
-        if (! $flat || (int) $flat->building?->building_owner !== (int) auth()->id()) {
+        if (! $flat || $buildingOwner !== (int) auth()->id()) {
             return response()->error('Flat not found', null, 404);
         }
 
@@ -346,8 +349,9 @@ class FlatController extends Controller
     public function destroy($id)
     {
         $flat = Flat::query()->with(['building:id,building_owner', 'images'])->find($id);
+        $buildingOwner = (int) data_get($flat, 'building.building_owner', 0);
 
-        if (! $flat || (int) $flat->building?->building_owner !== (int) auth()->id()) {
+        if (! $flat || $buildingOwner !== (int) auth()->id()) {
             return response()->error('Flat not found', null, 404);
         }
 
@@ -374,19 +378,18 @@ class FlatController extends Controller
         return Flat::query()
             ->where('flats.status', 'vacant')
             ->where('flats.is_active', true)
-            ->whereNull('flats.deleted_at')
             ->whereHas('building', function (Builder $query) use ($request) {
                 $query->where('is_active', true)
-                    ->when($request?->filled('division_id'), fn (Builder $q) => $q->where('division_id', $request->division_id))
-                    ->when($request?->filled('district_id'), fn (Builder $q) => $q->where('district_id', $request->district_id))
-                    ->when($request?->filled('thana_id'), fn (Builder $q) => $q->where('thana_id', $request->thana_id))
-                    ->when($request?->filled('area_id'), fn (Builder $q) => $q->where('area_id', $request->area_id));
+                    ->when($request?->has('division_id'), fn (Builder $q) => $q->where('division_id', $request->division_id))
+                    ->when($request?->has('district_id'), fn (Builder $q) => $q->where('district_id', $request->district_id))
+                    ->when($request?->has('thana_id'), fn (Builder $q) => $q->where('thana_id', $request->thana_id))
+                    ->when($request?->has('area_id'), fn (Builder $q) => $q->where('area_id', $request->area_id));
             })
-            ->when($request?->filled('min_rent'), fn (Builder $query) => $query->where('house_rent', '>=', $request->min_rent))
-            ->when($request?->filled('max_rent'), fn (Builder $query) => $query->where('house_rent', '<=', $request->max_rent))
-            ->when($request?->filled('bed_room'), fn (Builder $query) => $query->where('bed_room', $request->bed_room))
-            ->when($request?->filled('bathroom'), fn (Builder $query) => $query->where('bathroom', $request->bathroom))
-            ->when($request?->filled('is_furnished'), fn (Builder $query) => $query->where('is_furnished', (bool) $request->boolean('is_furnished')))
+            ->when($request?->has('min_rent'), fn (Builder $query) => $query->where('house_rent', '>=', $request->min_rent))
+            ->when($request?->has('max_rent'), fn (Builder $query) => $query->where('house_rent', '<=', $request->max_rent))
+            ->when($request?->has('bed_room'), fn (Builder $query) => $query->where('bed_room', $request->bed_room))
+            ->when($request?->has('bathroom'), fn (Builder $query) => $query->where('bathroom', $request->bathroom))
+            ->when($request?->has('is_furnished'), fn (Builder $query) => $query->where('is_furnished', (bool) $request->boolean('is_furnished')))
             ->when($request?->filled('search'), function (Builder $query) use ($request) {
                 $search = trim((string) $request->input('search'));
                 $query->where(function (Builder $q) use ($search) {
@@ -401,9 +404,15 @@ class FlatController extends Controller
 
     private function mapAvailableListPaginated(LengthAwarePaginator $paginator): array
     {
-        return [
-            'current_page' => $paginator->currentPage(),
-            'data' => collect($paginator->items())->map(fn (Flat $flat) => [
+        /** @var array<int, Flat> $items */
+        $items = $paginator->items();
+        $data = [];
+
+        foreach ($items as $flat) {
+            /** @var Building|null $building */
+            $building = $flat->building;
+
+            $data[] = [
                 'id' => $flat->id,
                 'flat_number' => $flat->flat_number,
                 'status' => $flat->status,
@@ -418,27 +427,32 @@ class FlatController extends Controller
                 'is_furnished' => $flat->is_furnished,
                 'image_url' => $flat->image_url,
                 'location' => [
-                    'division' => $flat->building?->division?->name,
-                    'district' => $flat->building?->district?->name,
-                    'thana' => $flat->building?->thana?->name,
-                    'area' => $flat->building?->area?->name,
-                    'address_line' => $flat->building?->address_line,
+                    'division' => data_get($building, 'division.name'),
+                    'district' => data_get($building, 'district.name'),
+                    'thana' => data_get($building, 'thana.name'),
+                    'area' => data_get($building, 'area.name'),
+                    'address_line' => $building?->address_line,
                     'text' => implode(', ', array_values(array_filter([
-                        $flat->building?->area?->name,
-                        $flat->building?->thana?->name ?? $flat->building?->district?->name,
+                        data_get($building, 'area.name'),
+                        data_get($building, 'thana.name') ?? data_get($building, 'district.name'),
                     ]))),
                 ],
                 'building' => [
-                    'id' => $flat->building?->id,
-                    'name' => $flat->building?->name,
-                    'has_gas' => (bool) $flat->building?->has_gas,
-                    'has_generator' => (bool) $flat->building?->has_generator,
-                    'has_lift' => (bool) $flat->building?->has_lift,
-                    'has_cctv' => (bool) $flat->building?->has_cctv,
-                    'has_security_guard' => (bool) $flat->building?->has_security_guard,
-                    'has_parking' => (bool) $flat->building?->has_parking,
+                    'id' => $building?->id,
+                    'name' => $building?->name,
+                    'has_gas' => (bool) $building?->has_gas,
+                    'has_generator' => (bool) $building?->has_generator,
+                    'has_lift' => (bool) $building?->has_lift,
+                    'has_cctv' => (bool) $building?->has_cctv,
+                    'has_security_guard' => (bool) $building?->has_security_guard,
+                    'has_parking' => (bool) $building?->has_parking,
                 ],
-            ])->values()->all(),
+            ];
+        }
+
+        return [
+            'current_page' => $paginator->currentPage(),
+            'data' => $data,
             'first_page_url' => $paginator->url(1),
             'from' => $paginator->firstItem(),
             'last_page' => $paginator->lastPage(),
@@ -454,6 +468,9 @@ class FlatController extends Controller
 
     private function mapAvailableDetails(Flat $flat): array
     {
+        /** @var Building|null $building */
+        $building = $flat->building;
+
         return [
             'id' => $flat->id,
             'flat_number' => $flat->flat_number,
@@ -471,31 +488,31 @@ class FlatController extends Controller
             'drawing' => $flat->drawing,
             'is_furnished' => $flat->is_furnished,
             'preferable' => $flat->preferable,
-            'images' => $flat->images->map(fn ($image) => [
-                'id' => $image->id,
-                'sort_order' => $image->sort_order,
-                'image_url' => $image->image_url,
+            'images' => $flat->images->map(static fn ($image): array => [
+                'id' => (int) data_get($image, 'id'),
+                'sort_order' => (int) data_get($image, 'sort_order'),
+                'image_url' => (string) data_get($image, 'image_url'),
             ])->values()->all(),
             'building' => [
-                'id' => $flat->building?->id,
-                'name' => $flat->building?->name,
-                'building_no' => $flat->building?->building_no,
-                'address_line' => $flat->building?->address_line,
-                'latitude' => $flat->building?->latitude,
-                'longitude' => $flat->building?->longitude,
-                'division' => $flat->building?->division?->name,
-                'district' => $flat->building?->district?->name,
-                'thana' => $flat->building?->thana?->name,
-                'area' => $flat->building?->area?->name,
-                'sector' => $flat->building?->sectorNode?->name,
-                'block' => $flat->building?->blockNode?->name,
-                'road' => $flat->building?->roadNode?->name,
-                'has_gas' => (bool) $flat->building?->has_gas,
-                'has_generator' => (bool) $flat->building?->has_generator,
-                'has_lift' => (bool) $flat->building?->has_lift,
-                'has_cctv' => (bool) $flat->building?->has_cctv,
-                'has_security_guard' => (bool) $flat->building?->has_security_guard,
-                'has_parking' => (bool) $flat->building?->has_parking,
+                'id' => $building?->id,
+                'name' => $building?->name,
+                'building_no' => $building?->building_no,
+                'address_line' => $building?->address_line,
+                'latitude' => $building?->latitude,
+                'longitude' => $building?->longitude,
+                'division' => data_get($building, 'division.name'),
+                'district' => data_get($building, 'district.name'),
+                'thana' => data_get($building, 'thana.name'),
+                'area' => data_get($building, 'area.name'),
+                'sector' => data_get($building, 'sectorNode.name'),
+                'block' => data_get($building, 'blockNode.name'),
+                'road' => data_get($building, 'roadNode.name'),
+                'has_gas' => (bool) $building?->has_gas,
+                'has_generator' => (bool) $building?->has_generator,
+                'has_lift' => (bool) $building?->has_lift,
+                'has_cctv' => (bool) $building?->has_cctv,
+                'has_security_guard' => (bool) $building?->has_security_guard,
+                'has_parking' => (bool) $building?->has_parking,
             ],
         ];
     }
