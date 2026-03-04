@@ -13,6 +13,7 @@ class Flat extends Model
 
     protected $fillable = [
         'building_id',
+        'tenant_id',
         'flat_number',
         'floor_no',
         'bed_room',
@@ -37,6 +38,7 @@ class Flat extends Model
     ];
 
     protected $casts = [
+        'tenant_id' => 'integer',
         'floor_no' => 'integer',
         'bed_room' => 'integer',
         'bathroom' => 'integer',
@@ -61,6 +63,11 @@ class Flat extends Model
     public function images(): HasMany
     {
         return $this->hasMany(FlatImage::class)->orderBy('sort_order');
+    }
+
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'tenant_id');
     }
 
     public function getImageUrlAttribute(): ?string

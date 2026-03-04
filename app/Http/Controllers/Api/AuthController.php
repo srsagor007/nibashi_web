@@ -4,14 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppMenu;
+use App\Models\Role;
 use App\Models\User;
 use App\Services\FileUploadService;
 use App\Services\SmsService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
@@ -150,6 +153,119 @@ class AuthController extends Controller
             'birthday_message' => $birthday_message,
             'anniversary_message' => $anniversary_message,
         ], 'User data found', 200);
+    }
+
+    public function assignedRoleList(Request $request)
+    {
+        $user = $request->user();
+
+        $roles = $user->roles()
+            ->where('roles.is_active', 1)
+            ->wherePivot('is_active', 1)
+            ->select('roles.id', 'roles.title', 'roles.slug')
+            ->orderBy('roles.title')
+            ->get()
+            ->map(function ($role) use ($user) {
+                return [
+                    'id' => $role->id,
+                    'title' => $role->title,
+                    'slug' => $role->slug,
+                    'is_primary' => (bool) (($role->pivot->is_primary ?? false) || (int) $user->primary_role_id === (int) $role->id),
+                ];
+            })
+            ->values();
+
+        if ($roles->isEmpty() && $user->primary_role_id) {
+            $primaryRole = $user->user_type()
+                ->where('is_active', 1)
+                ->select('id', 'title', 'slug')
+                ->first();
+
+            if ($primaryRole) {
+                $roles = collect([[
+                    'id' => $primaryRole->id,
+                    'title' => $primaryRole->title,
+                    'slug' => $primaryRole->slug,
+                    'is_primary' => true,
+                ]]);
+            }
+        }
+
+        return response()->success($roles, 'Assigned role list found', 200);
+    }
+
+    public function switchRole(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'role' => ['required', 'string', Rule::in(['tenant', 'landowner', 'lanowner', 'serviceprovider', 'service_provider'])],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->error('The given data was invalid', $validator->errors(), 422);
+        }
+
+        $normalizedRole = strtolower($request->role);
+        $normalizedRole = match ($normalizedRole) {
+            'lanowner' => 'landowner',
+            'service_provider' => 'serviceprovider',
+            default => $normalizedRole,
+        };
+
+        $role = Role::query()
+            ->where('slug', $normalizedRole)
+            ->where('is_active', 1)
+            ->select('id', 'title', 'slug')
+            ->first();
+
+        if (! $role) {
+            return response()->error('Selected role is not available', null, 422);
+        }
+
+        $user = $request->user();
+
+        DB::transaction(function () use ($user, $role) {
+            DB::table('role_user')
+                ->where('user_id', $user->id)
+                ->update([
+                    'is_primary' => 0,
+                    'updated_at' => now(),
+                ]);
+
+            DB::table('role_user')->updateOrInsert(
+                ['user_id' => $user->id, 'role_id' => $role->id],
+                [
+                    'is_primary' => 1,
+                    'is_active' => 1,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
+            );
+
+            $user->update([
+                'primary_role_id' => $role->id,
+            ]);
+        });
+
+        $assignedRoles = $user->roles()
+            ->where('roles.is_active', 1)
+            ->wherePivot('is_active', 1)
+            ->select('roles.id', 'roles.title', 'roles.slug')
+            ->orderBy('roles.title')
+            ->get()
+            ->map(function ($assignedRole) use ($role) {
+                return [
+                    'id' => $assignedRole->id,
+                    'title' => $assignedRole->title,
+                    'slug' => $assignedRole->slug,
+                    'is_primary' => (int) $assignedRole->id === (int) $role->id,
+                ];
+            })
+            ->values();
+
+        return response()->success([
+            'active_role' => $role,
+            'assigned_roles' => $assignedRoles,
+        ], 'User role switched successfully', 200);
     }
 
     public function updateProfile(Request $request)

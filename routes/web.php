@@ -3,6 +3,7 @@
 
 use App\Http\Controllers\AdminConsole\MenuController;
 use App\Http\Controllers\AdminConsole\PermissionController;
+use App\Http\Controllers\AdminConsole\CoinPackController;
 use App\Http\Controllers\AdminConsole\UserRoleController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\DashboardController;
@@ -70,6 +71,8 @@ Route::middleware(['auth', 'password_change_verify'])->group(function () {
 
                 Route::get('settings', [\App\Http\Controllers\AdminConsole\SettingsController::class, 'index'])->name('settings.index');
                 Route::put('settings/update-site-info', [\App\Http\Controllers\AdminConsole\SettingsController::class, 'update_site_info'])->name('settings.update-site-info');
+                Route::resource('coin-packs', CoinPackController::class)->only(['index', 'store', 'update', 'destroy']);
+                Route::post('coin-packs/{coin_pack}/{status}', [CoinPackController::class, 'updateStatus'])->name('coin-packs.update-status');
             });
 
     });

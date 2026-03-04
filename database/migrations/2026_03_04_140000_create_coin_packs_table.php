@@ -1,0 +1,31 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('coin_packs', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('coins');
+            $table->decimal('price', 10, 2);
+            $table->string('badge_text', 50)->nullable();
+            $table->string('badge_color', 20)->nullable();
+            $table->unsignedInteger('sort_order')->default(0);
+            $table->boolean('is_active')->default(true);
+            $table->softDeletes();
+            $table->timestamps();
+
+            $table->unique('coins');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('coin_packs');
+    }
+};
+
